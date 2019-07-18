@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
-        <module>trainning-engine-core</module>
+        <module>training-engine-core</module>
     </modules>
 
     <properties>
