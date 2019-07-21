@@ -11,7 +11,7 @@
 
     <logger name="io.netty.buffer" level="INFO"/>
     <logger name="com.lyl.study" level="DEBUG"/>
-    <logger name="com.lyl.study.trainning.engine.core.rpc.netty.NettyAskContext" level="TRACE"/>
+    <logger name="com.lyl.study.trainning.engine.core.net.netty.NettyAskContext" level="TRACE"/>
 
     <!-- Logger 根目录 -->
     <root level="INFO">
