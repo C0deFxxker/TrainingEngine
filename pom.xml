@@ -3,20 +3,21 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.lyl.study.trainning</groupId>
-    <artifactId>trainning-engine</artifactId>
+    <groupId>com.lyl.study.training</groupId>
+    <artifactId>training-engine</artifactId>
     <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
     <modules>
         <module>training-engine-core</module>
+        <module>training-engine-master</module>
+        <module>training-engine-driver</module>
+        <module>training-engine-worker</module>
     </modules>
 
     <properties>
-        <springboot.version>1.5.15.RELEASE</springboot.version>
-        <springcloud.version>Dalston.SR4</springcloud.version>
-        <mybatisplus-starter.version>2.1.9</mybatisplus-starter.version>
+        <springboot.version>2.1.6.RELEASE</springboot.version>
+        <mysql.version>5.1.47</mysql.version>
         <lombok.version>1.16.16</lombok.version>
-        <netty.version>4.1.37.Final</netty.version>
         <java.version>1.8</java.version>
     </properties>
 
@@ -31,23 +32,9 @@
             </dependency>
 
             <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${springcloud.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
-                <version>${mybatisplus-starter.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.netty</groupId>
-                <artifactId>netty-all</artifactId>
-                <version>${netty.version}</version>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>${mysql.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
