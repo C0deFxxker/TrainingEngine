@@ -1,6 +1,5 @@
 package com.lyl.study.trainning.engine.core.net.netty.handler;
 
-import com.lyl.study.trainning.engine.core.rpc.netty.NettyRpcCallContext;
 import com.lyl.study.trainning.engine.core.rpc.serialize.Codec;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -13,15 +12,16 @@ import java.util.List;
  *
  * @author liyilin
  */
-public class NettyRequestCodec extends ByteToMessageCodec<NettyRpcCallContext> {
-    private final Codec<NettyRpcCallContext, byte[]> codec;
+public class NettyRequestCodec<T> extends ByteToMessageCodec<T> {
+    private final Codec<T, byte[]> codec;
 
-    public NettyRequestCodec(Codec<NettyRpcCallContext, byte[]> codec) {
+    public NettyRequestCodec(Codec<T, byte[]> codec) {
+        super(codec.getInClass());
         this.codec = codec;
     }
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, NettyRpcCallContext msg, ByteBuf out) throws Exception {
+    protected void encode(ChannelHandlerContext ctx, T msg, ByteBuf out) throws Exception {
         byte[] encode = codec.encode(msg);
         out.writeBytes(encode);
     }
@@ -30,7 +30,7 @@ public class NettyRequestCodec extends ByteToMessageCodec<NettyRpcCallContext> {
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
         byte[] bytes = new byte[in.readableBytes()];
         in.readBytes(bytes);
-        NettyRpcCallContext decode = codec.decode(bytes);
+        T decode = codec.decode(bytes);
         out.add(decode);
     }
 }

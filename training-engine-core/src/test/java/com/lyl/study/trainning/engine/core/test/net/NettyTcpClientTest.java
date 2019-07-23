@@ -36,7 +36,7 @@ public class NettyTcpClientTest {
         TcpServer<NettyRpcCallContext> tcpServer = buildLocalServer(serverPort);
         tcpServer.start().get();
 
-        NettyTcpClient nettyTcpClient = new NettyTcpClient(
+        NettyTcpClient<NettyRpcCallContext> nettyTcpClient = new NettyTcpClient<>(
                 null, null, null, new InetSocketAddress("127.0.0.1", serverPort));
 
         nettyTcpClient.start().get();
@@ -52,11 +52,6 @@ public class NettyTcpClientTest {
         tcpServer.shutdown().get();
     }
 
-//    NettyTcpServerTest中已做了类似的测试，这里不重写了
-//    @Test
-//    public void testSendAndReceive() {
-//    }
-
     @Test(expected = ConnectException.class, timeout = 5000L)
 
     public void testConnectFail() throws Throwable {
@@ -65,8 +60,9 @@ public class NettyTcpClientTest {
         NettyClientSocketOptions options = new NettyClientSocketOptions();
         options.setReconnectDelayMillis(1000L);
         options.setReconnectMaxAttempts(3);
-        NettyTcpClient nettyTcpClient = new NettyTcpClient(
-                null, null, options, new InetSocketAddress("127.0.0.1", serverPort));
+        Codec<NettyRpcCallContext, byte[]> codec = new TypicalObjectMapperCodec<>(NettyRpcCallContext.class);
+        NettyTcpClient<NettyRpcCallContext> nettyTcpClient = new NettyTcpClient<>(
+                null, codec, options, new InetSocketAddress("127.0.0.1", serverPort));
         try {
             nettyTcpClient.start().get();
         } catch (ExecutionException e) {
@@ -81,7 +77,7 @@ public class NettyTcpClientTest {
         TcpServer<NettyRpcCallContext> tcpServer = buildLocalServer(serverPort);
         tcpServer.start().get();
         final AtomicInteger startTime = new AtomicInteger(0);
-        NettyTcpClient nettyTcpClient = new NettyTcpClient(
+        NettyTcpClient<NettyRpcCallContext> nettyTcpClient = new NettyTcpClient<NettyRpcCallContext>(
                 null, null, null, new InetSocketAddress("127.0.0.1", serverPort)) {
             @Override
             protected Future<Void> doStart() {
@@ -126,6 +122,6 @@ public class NettyTcpClientTest {
         NettyServerSocketOptions options = new NettyServerSocketOptions();
 
 
-        return new NettyTcpServer(dispatcher, codec, options, new InetSocketAddress(port));
+        return new NettyTcpServer<>(dispatcher, codec, options, new InetSocketAddress(port));
     }
 }

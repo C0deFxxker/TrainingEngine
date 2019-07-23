@@ -24,6 +24,16 @@ public class TypicalObjectMapperCodec<T> implements Codec<T, byte[]> {
         this.objectMapper = defaultObjectMapper();
     }
 
+    @Override
+    public Class<T> getInClass() {
+        return clazz;
+    }
+
+    @Override
+    public Class<byte[]> getOutClass() {
+        return byte[].class;
+    }
+
     private ObjectMapper defaultObjectMapper() {
         // 默认ObjectMapper
         ObjectMapper om = new ObjectMapper();

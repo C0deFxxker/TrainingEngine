@@ -4,7 +4,6 @@ import com.lyl.study.trainning.engine.core.net.TcpServer;
 import com.lyl.study.trainning.engine.core.net.netty.handler.DispatchChannelInboundHandler;
 import com.lyl.study.trainning.engine.core.net.netty.handler.NettyRequestCodec;
 import com.lyl.study.trainning.engine.core.rpc.dispatch.Dispatcher;
-import com.lyl.study.trainning.engine.core.rpc.netty.NettyRpcCallContext;
 import com.lyl.study.trainning.engine.core.rpc.serialize.Codec;
 import com.lyl.study.trainning.engine.core.util.PlatformUtils;
 import io.netty.bootstrap.ServerBootstrap;
@@ -32,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author liyilin
  */
 @Slf4j
-public class NettyTcpServer extends TcpServer<NettyRpcCallContext> {
+public class NettyTcpServer<T> extends TcpServer<T> {
     /**
      * 处理Accept连接事件的线程，这里线程数设置为1即可，netty处理链接事件默认为单线程，过度设置反而浪费cpu资源
      */
@@ -52,7 +51,7 @@ public class NettyTcpServer extends TcpServer<NettyRpcCallContext> {
     protected AtomicBoolean active = new AtomicBoolean(false);
 
     public NettyTcpServer(Dispatcher dispatcher,
-                          Codec<NettyRpcCallContext, byte[]> codec,
+                          Codec<T, byte[]> codec,
                           NettyServerSocketOptions options,
                           SocketAddress bindAddress) {
         super(dispatcher, codec, options, bindAddress);
@@ -89,7 +88,9 @@ public class NettyTcpServer extends TcpServer<NettyRpcCallContext> {
                     log.debug("CONNECT {}", ch);
                 }
 
-                ch.pipeline().addLast(new NettyRequestCodec(getCodec()));
+                if (codec != null) {
+                    ch.pipeline().addLast(new NettyRequestCodec<>(codec));
+                }
                 ch.pipeline().addLast(new DispatchChannelInboundHandler(getDispatcher()));
 
                 if (null != options && null != options.getPipelineConfigurer()) {

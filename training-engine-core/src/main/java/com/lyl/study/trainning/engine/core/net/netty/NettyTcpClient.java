@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author liyilin
  */
 @Slf4j
-public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
+public class NettyTcpClient<T> extends TcpClient<T> {
     /**
      * 处理handler的工作线程，线程数据默认为 CPU 核心数乘以2
      */
@@ -52,7 +52,7 @@ public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
     private ClientChannelHandler clientChannelHandler = new ClientChannelHandler(this);
 
     public NettyTcpClient(Dispatcher dispatcher,
-                          Codec<NettyRpcCallContext, byte[]> codec,
+                          Codec<T, byte[]> codec,
                           final NettyClientSocketOptions options,
                           final SocketAddress connectAddress) {
         super(dispatcher, codec, options, connectAddress);
@@ -76,7 +76,9 @@ public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
                 if (options != null) {
                     ch.config().setConnectTimeoutMillis((int) options.getTimeoutMillis());
 
-                    ch.pipeline().addLast(new NettyRequestCodec(codec));
+                    if (codec != null) {
+                        ch.pipeline().addLast(new NettyRequestCodec<>(codec));
+                    }
                     ch.pipeline().addLast(clientChannelHandler);
 
                     if (options.getPipelineConfigurer() != null) {
@@ -92,7 +94,7 @@ public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
     }
 
     @Override
-    protected Future<Void> doWriteWith(NettyRpcCallContext object) throws EncodeException {
+    protected Future<Void> doWriteWith(T object) throws EncodeException {
         byte[] encode = getCodec().encode(object);
         return clientChannelHandler.send(encode);
     }
@@ -166,7 +168,7 @@ public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
     private class ClientChannelHandler extends DispatchChannelInboundHandler {
         private ChannelHandlerContext context;
 
-        ClientChannelHandler(NetworkEndpoint<NettyRpcCallContext> socketChannel) {
+        ClientChannelHandler(NetworkEndpoint<T> socketChannel) {
             super(socketChannel.getDispatcher());
         }
 

@@ -8,6 +8,11 @@ package com.lyl.study.trainning.engine.core.rpc.serialize;
  * @author liyilin
  */
 public interface Codec<IN, OUT> {
+
+    Class<IN> getInClass();
+
+    Class<OUT> getOutClass();
+
     /**
      * 编码操作
      *
