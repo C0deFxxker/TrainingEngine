@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 public final class PlatformUtils {
     private static final boolean IS_ANDROID = isAndroid0();
     private static final boolean IS_WINDOWS = isWindows0();
+    private static final boolean IS_MACOS = isMacOS0();
 
     private static final boolean IS_ROOT = isRoot0();
 
@@ -84,6 +85,10 @@ public final class PlatformUtils {
 
     private static boolean isWindows0() {
         return System.getProperty("os.name", "").toLowerCase(Locale.US).contains("win");
+    }
+
+    private static boolean isMacOS0() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.US).contains("mac os");
     }
 
     private static boolean isAndroid0() {
@@ -263,6 +268,13 @@ public final class PlatformUtils {
      */
     public static boolean isWindows() {
         return IS_WINDOWS;
+    }
+
+    /**
+     * @return 如果当前是MacOS系统则返回 {@code true}，否则返回 {@code false}
+     */
+    public static boolean isMacOS() {
+        return IS_MACOS;
     }
 
     /**

@@ -3,7 +3,6 @@ package com.lyl.study.trainning.engine.core.net;
 import com.lyl.study.trainning.engine.core.net.config.ClientSocketOptions;
 import com.lyl.study.trainning.engine.core.rpc.dispatch.Dispatcher;
 import com.lyl.study.trainning.engine.core.rpc.serialize.Codec;
-import com.lyl.study.trainning.engine.core.rpc.serialize.DecodeException;
 import com.lyl.study.trainning.engine.core.rpc.serialize.EncodeException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,7 +15,7 @@ import java.util.concurrent.Future;
  * @author liyilin
  */
 @Slf4j
-public abstract class TcpClient<T> extends SocketChannel<T> {
+public abstract class TcpClient<T> extends NetworkEndpoint<T> {
     protected final ClientSocketOptions clientSocketOptions;
     protected final SocketAddress connectAddress;
 
@@ -35,9 +34,9 @@ public abstract class TcpClient<T> extends SocketChannel<T> {
      * @param object 要发送的消息对象
      * @throws EncodeException 要发送的消息对象序列化异常
      */
-    public final Future<Void> send(T object) throws EncodeException {
+    public Future<Void> writeWith(T object) throws EncodeException {
         if (isActive()) {
-            return doSend(object);
+            return doWriteWith(object);
         } else {
             throw new IllegalStateException("Client is inactive.");
         }
@@ -49,7 +48,7 @@ public abstract class TcpClient<T> extends SocketChannel<T> {
      * @param object 要发送的消息对象
      * @throws EncodeException 要发送的消息对象序列化异常
      */
-    protected abstract Future<Void> doSend(T object) throws EncodeException;
+    protected abstract Future<Void> doWriteWith(T object) throws EncodeException;
 
 //    /**
 //     * 向服务器发送请求消息（一请求一响应模式）

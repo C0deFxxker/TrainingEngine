@@ -16,13 +16,9 @@ public class RequestMessage {
      */
     private String requestId;
     /**
-     * 发送者地址
+     * 请求状态码
      */
-    private RpcAddress senderAddress;
-    /**
-     * 接受者引用
-     */
-    private transient RpcEndpointRef receiver;
+    private int status;
     /**
      * 消息内容
      */

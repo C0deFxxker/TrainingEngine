@@ -1,7 +1,10 @@
 package com.lyl.study.trainning.engine.core.net.netty;
 
 import com.lyl.study.trainning.engine.core.net.TcpServer;
+import com.lyl.study.trainning.engine.core.net.netty.handler.DispatchChannelInboundHandler;
+import com.lyl.study.trainning.engine.core.net.netty.handler.NettyRequestCodec;
 import com.lyl.study.trainning.engine.core.rpc.dispatch.Dispatcher;
+import com.lyl.study.trainning.engine.core.rpc.netty.NettyRpcCallContext;
 import com.lyl.study.trainning.engine.core.rpc.serialize.Codec;
 import com.lyl.study.trainning.engine.core.util.PlatformUtils;
 import io.netty.bootstrap.ServerBootstrap;
@@ -29,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author liyilin
  */
 @Slf4j
-public class NettyTcpServer<T> extends TcpServer<T> {
+public class NettyTcpServer extends TcpServer<NettyRpcCallContext> {
     /**
      * 处理Accept连接事件的线程，这里线程数设置为1即可，netty处理链接事件默认为单线程，过度设置反而浪费cpu资源
      */
@@ -37,7 +40,8 @@ public class NettyTcpServer<T> extends TcpServer<T> {
     /**
      * 处理handler的工作线程，线程数据默认为 CPU 核心数乘以2
      */
-    protected EventLoopGroup workerGroup = PlatformUtils.isWindows() ? new NioEventLoopGroup() : new EpollEventLoopGroup();
+    protected EventLoopGroup workerGroup = PlatformUtils.isWindows() || PlatformUtils.isMacOS()
+            ? new NioEventLoopGroup() : new EpollEventLoopGroup();
     /**
      * Netty服务器启动对象
      */
@@ -48,7 +52,7 @@ public class NettyTcpServer<T> extends TcpServer<T> {
     protected AtomicBoolean active = new AtomicBoolean(false);
 
     public NettyTcpServer(Dispatcher dispatcher,
-                          Codec<T, byte[]> codec,
+                          Codec<NettyRpcCallContext, byte[]> codec,
                           NettyServerSocketOptions options,
                           SocketAddress bindAddress) {
         super(dispatcher, codec, options, bindAddress);
@@ -85,6 +89,9 @@ public class NettyTcpServer<T> extends TcpServer<T> {
                     log.debug("CONNECT {}", ch);
                 }
 
+                ch.pipeline().addLast(new NettyRequestCodec(getCodec()));
+                ch.pipeline().addLast(new DispatchChannelInboundHandler(getDispatcher()));
+
                 if (null != options && null != options.getPipelineConfigurer()) {
                     options.getPipelineConfigurer().accept(ch.pipeline());
                 }
@@ -98,12 +105,19 @@ public class NettyTcpServer<T> extends TcpServer<T> {
 
     @Override
     protected Future<Void> doStart() {
-        return bootstrap.bind().addListener(future -> {
+        // 不能直接返回Netty的ChannelFuture。当调用ChannelFuture的get()方法有返回时，
+        // ChannelFuture上面的Listener方法是在另一个线程同时执行，可能会因此引发active状态还未置为true的BUG
+        FutureTask<Void> futureTask = new FutureTask<>(() -> {
+            bootstrap.bind().sync();
             active.set(true);
-            if (log.isDebugEnabled()) {
-                log.debug("Server is active now");
+            if (log.isInfoEnabled()) {
+                log.info("Server is active now - " + listenAddress);
             }
+            return null;
         });
+        // TODO 迟点编写一个全局线程池，专门执行这种小任务
+        new Thread(futureTask).start();
+        return futureTask;
     }
 
     @Override
@@ -112,8 +126,8 @@ public class NettyTcpServer<T> extends TcpServer<T> {
             bossGroup.shutdownGracefully().sync();
             workerGroup.shutdownGracefully().sync();
             active.set(false);
-            if (log.isDebugEnabled()) {
-                log.debug("Server is shutdown now");
+            if (log.isInfoEnabled()) {
+                log.info("Server is shutdown now - " + listenAddress);
             }
             return null;
         });

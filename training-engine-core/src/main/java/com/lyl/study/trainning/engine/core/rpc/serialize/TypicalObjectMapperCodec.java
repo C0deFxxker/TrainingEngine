@@ -8,22 +8,18 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.lyl.study.trainning.engine.core.rpc.RequestMessage;
-import com.lyl.study.trainning.engine.core.rpc.RpcAddress;
-import com.lyl.study.trainning.engine.core.net.netty.NettyResponse;
-
-import java.util.HashMap;
 
 /**
- * ObjectMapper编解码器
+ * 带类型标记的ObjectMapper编解码器
  *
+ * @param <T> 支持序列化/反序列化的类
  * @author liyilin
  */
-public class ObjectMapperCodec<T> implements Codec<T, byte[]> {
+public class TypicalObjectMapperCodec<T> implements Codec<T, byte[]> {
     private ObjectMapper objectMapper;
     private Class<T> clazz;
 
-    public ObjectMapperCodec(Class<T> clazz) {
+    public TypicalObjectMapperCodec(Class<T> clazz) {
         this.clazz = clazz;
         this.objectMapper = defaultObjectMapper();
     }
@@ -47,11 +43,6 @@ public class ObjectMapperCodec<T> implements Codec<T, byte[]> {
         return om;
     }
 
-//    public ObjectMapperCodec(ObjectMapper objectMapper, Class<T> clazz) {
-//        this.objectMapper = objectMapper;
-//        this.clazz = clazz;
-//    }
-
     @Override
     public byte[] encode(T t) throws EncodeException {
         try {
@@ -68,27 +59,5 @@ public class ObjectMapperCodec<T> implements Codec<T, byte[]> {
         } catch (Exception e) {
             throw new DecodeException(e.getMessage());
         }
-    }
-
-    public static void main(String[] args) throws EncodeException, DecodeException {
-        ObjectMapperCodec<RequestMessage> codec = new ObjectMapperCodec<>(RequestMessage.class);
-
-        HashMap<Object, Object> map = new HashMap<>(2);
-        map.put("code", 0);
-        map.put("msg", "success");
-        NettyResponse nettyResponse = new NettyResponse();
-        nettyResponse.setSuccess(true);
-        nettyResponse.setContent(map);
-
-        RequestMessage requestMessage = new RequestMessage();
-        requestMessage.setRequestId("1");
-        requestMessage.setSenderAddress(new RpcAddress("127.0.0.1", 80));
-        requestMessage.setContent(nettyResponse);
-
-        byte[] encode = codec.encode(requestMessage);
-        System.out.println(new String(encode));
-
-        RequestMessage decode = codec.decode(encode);
-        System.out.println(decode.toString());
     }
 }

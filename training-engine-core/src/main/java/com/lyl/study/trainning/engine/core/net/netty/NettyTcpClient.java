@@ -1,11 +1,18 @@
 package com.lyl.study.trainning.engine.core.net.netty;
 
+import com.lyl.study.trainning.engine.core.net.NetworkEndpoint;
 import com.lyl.study.trainning.engine.core.net.TcpClient;
+import com.lyl.study.trainning.engine.core.net.netty.handler.DispatchChannelInboundHandler;
+import com.lyl.study.trainning.engine.core.net.netty.handler.NettyRequestCodec;
 import com.lyl.study.trainning.engine.core.rpc.dispatch.Dispatcher;
+import com.lyl.study.trainning.engine.core.rpc.netty.NettyRpcCallContext;
 import com.lyl.study.trainning.engine.core.rpc.serialize.Codec;
 import com.lyl.study.trainning.engine.core.rpc.serialize.EncodeException;
+import com.lyl.study.trainning.engine.core.util.InvokeUtils;
 import com.lyl.study.trainning.engine.core.util.PlatformUtils;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
@@ -15,12 +22,9 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.SocketAddress;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Netty实现的Tcp客户端
@@ -28,11 +32,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author liyilin
  */
 @Slf4j
-public class NettyTcpClient<T> extends TcpClient<T> {
+public class NettyTcpClient extends TcpClient<NettyRpcCallContext> {
     /**
      * 处理handler的工作线程，线程数据默认为 CPU 核心数乘以2
      */
-    protected EventLoopGroup workerGroup = PlatformUtils.isWindows() ? new NioEventLoopGroup() : new EpollEventLoopGroup();
+    protected EventLoopGroup workerGroup = PlatformUtils.isWindows() || PlatformUtils.isMacOS()
+            ? new NioEventLoopGroup() : new EpollEventLoopGroup();
     /**
      * Netty客户端启动对象
      */
@@ -44,10 +49,10 @@ public class NettyTcpClient<T> extends TcpClient<T> {
     /**
      * 用于发送消息的ChannelHandler
      */
-    private ClientChannelHandler clientChannelHandler = new ClientChannelHandler();
+    private ClientChannelHandler clientChannelHandler = new ClientChannelHandler(this);
 
     public NettyTcpClient(Dispatcher dispatcher,
-                          Codec<T, byte[]> codec,
+                          Codec<NettyRpcCallContext, byte[]> codec,
                           final NettyClientSocketOptions options,
                           final SocketAddress connectAddress) {
         super(dispatcher, codec, options, connectAddress);
@@ -71,11 +76,12 @@ public class NettyTcpClient<T> extends TcpClient<T> {
                 if (options != null) {
                     ch.config().setConnectTimeoutMillis((int) options.getTimeoutMillis());
 
+                    ch.pipeline().addLast(new NettyRequestCodec(codec));
+                    ch.pipeline().addLast(clientChannelHandler);
+
                     if (options.getPipelineConfigurer() != null) {
                         options.getPipelineConfigurer().accept(ch.pipeline());
                     }
-
-                    ch.pipeline().addLast(clientChannelHandler);
                 }
             }
         });
@@ -86,7 +92,7 @@ public class NettyTcpClient<T> extends TcpClient<T> {
     }
 
     @Override
-    protected Future<Void> doSend(T object) throws EncodeException {
+    protected Future<Void> doWriteWith(NettyRpcCallContext object) throws EncodeException {
         byte[] encode = getCodec().encode(object);
         return clientChannelHandler.send(encode);
     }
@@ -100,8 +106,37 @@ public class NettyTcpClient<T> extends TcpClient<T> {
             delayMillis = options.getReconnectDelayMillis();
             maxAttempts = options.getReconnectMaxAttempts();
         }
-        return bootstrap.connect(connectAddress)
-                .addListener(new ReconnectingChannelListener(delayMillis, maxAttempts));
+
+        // TODO 迟点编写一个全局线程池，专门执行这种小任务
+        return InvokeUtils.failRetry(() -> {
+            if (isStarted()) {
+                ChannelFuture future = bootstrap.connect(connectAddress).sync();
+                // connected
+                if (log.isInfoEnabled()) {
+                    log.info("CONNECTED: " + future.channel());
+                }
+                active.set(true);
+
+                // 添加故障重连Handler
+                final Channel ioCh = future.channel();
+                ioCh.pipeline().addLast(new ChannelDuplexHandler() {
+                    @Override
+                    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                        if (isStarted()) {
+                            if (log.isInfoEnabled()) {
+                                log.info("CLOSED: " + ioCh);
+                            }
+                            active.set(false);
+
+                            doStart();
+                        }
+                        super.channelInactive(ctx);
+                    }
+                });
+            }
+            // 其它线程把客户端关闭后，就没必要继续重试了
+            return null;
+        }, delayMillis, maxAttempts);
     }
 
     @Override
@@ -125,17 +160,23 @@ public class NettyTcpClient<T> extends TcpClient<T> {
     }
 
     /**
-     * 用于主动向服务器发送消息的ChannelHandler
+     * NettyTcpClient内置Handler
      */
-    private static class ClientChannelHandler extends ChannelInboundHandlerAdapter {
+    @ChannelHandler.Sharable
+    private class ClientChannelHandler extends DispatchChannelInboundHandler {
         private ChannelHandlerContext context;
+
+        ClientChannelHandler(NetworkEndpoint<NettyRpcCallContext> socketChannel) {
+            super(socketChannel.getDispatcher());
+        }
 
         Future<Void> send(byte[] msg) {
             if (context == null) {
                 throw new IllegalStateException("Connection is inactive");
             }
 
-            return context.writeAndFlush(msg);
+            ByteBuf byteBuf = Unpooled.copiedBuffer(msg);
+            return context.writeAndFlush(byteBuf);
         }
 
         @Override
@@ -148,72 +189,6 @@ public class NettyTcpClient<T> extends TcpClient<T> {
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             context = null;
             super.channelInactive(ctx);
-        }
-    }
-
-    /**
-     * 自动重连用到Channel监听器
-     */
-    private class ReconnectingChannelListener implements ChannelFutureListener {
-        private final AtomicInteger attempts = new AtomicInteger(0);
-
-        private Timer timer = new Timer();
-
-        private final int maxAttempts;
-        private final long delayMillis;
-
-        private ReconnectingChannelListener(long delayMillis,
-                                            int maxAttempts) {
-            this.delayMillis = delayMillis;
-            this.maxAttempts = maxAttempts;
-        }
-
-        @Override
-        public void operationComplete(final ChannelFuture future) {
-            if (!future.isSuccess()) {
-                int attempt = attempts.incrementAndGet();
-                if (attempt >= maxAttempts) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("重连次数超过上限，停止自动重连");
-                    }
-                    return;
-                }
-                attemptReconnect();
-            } else {
-                // connected
-                if (log.isInfoEnabled()) {
-                    log.info("CONNECTED: " + future.channel());
-                }
-                active.set(true);
-
-                // 添加故障重连Handler
-                final Channel ioCh = future.channel();
-                ioCh.pipeline().addLast(new ChannelDuplexHandler() {
-                    @Override
-                    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-                        if (log.isInfoEnabled()) {
-                            log.info("CLOSED: " + ioCh);
-                        }
-
-                        attemptReconnect();
-                        super.channelInactive(ctx);
-                    }
-                });
-            }
-        }
-
-        private void attemptReconnect() {
-            if (log.isInfoEnabled()) {
-                log.info("Failed to connect to {}. Attempting reconnect in {}ms.", connectAddress, delayMillis);
-            }
-
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    bootstrap.connect(connectAddress)
-                            .addListener(ReconnectingChannelListener.this);
-                }
-            }, delayMillis);
         }
     }
 }
