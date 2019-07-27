@@ -12,6 +12,7 @@
         <module>training-engine-master</module>
         <module>training-engine-driver</module>
         <module>training-engine-worker</module>
+        <module>resource-manager</module>
     </modules>
 
     <properties>
