@@ -90,17 +90,17 @@ public class ThreadPoolTaskExecutor extends ThreadPoolExecutor implements TaskEx
             }
         }
 
-        TaskRunnable taskRunnable = new TaskRunnable(taskExecution);
-        FutureTask<Void> future = new FutureTask<>(taskRunnable, null);
-        getQueue().offer(taskRunnable);
+        ThreadPoolTaskExecutorTaskRunnable threadPoolTaskExecutorTaskRunnable = new ThreadPoolTaskExecutorTaskRunnable(taskExecution);
+        FutureTask<Void> future = new FutureTask<>(threadPoolTaskExecutorTaskRunnable, null);
+        getQueue().offer(threadPoolTaskExecutorTaskRunnable);
         return future;
     }
 
     @Override
     public List<TaskExecution> forceShutdown() {
         return shutdownNow().stream()
-                .filter(e -> e instanceof TaskRunnable)
-                .map(e -> ((TaskRunnable) e).getTaskExecution())
+                .filter(e -> e instanceof ThreadPoolTaskExecutorTaskRunnable)
+                .map(e -> ((ThreadPoolTaskExecutorTaskRunnable) e).getTaskExecution())
                 .collect(Collectors.toList());
     }
 
@@ -112,7 +112,7 @@ public class ThreadPoolTaskExecutor extends ThreadPoolExecutor implements TaskEx
                 stopTaskIdSet.add(taskId);
                 return true;
             } else {
-                return getQueue().removeIf(e -> ((TaskRunnable) e).getTaskExecution().getId().equals(taskId));
+                return getQueue().removeIf(e -> ((ThreadPoolTaskExecutorTaskRunnable) e).getTaskExecution().getId().equals(taskId));
             }
         } finally {
             lock.unlock();
@@ -122,58 +122,43 @@ public class ThreadPoolTaskExecutor extends ThreadPoolExecutor implements TaskEx
     /**
      * 任务Runnable接口封装类
      */
-    public class TaskRunnable implements Runnable, Comparable<TaskRunnable> {
-        private final TaskExecution taskExecution;
-
-        public TaskRunnable(TaskExecution taskExecution) {
-            this.taskExecution = taskExecution;
-        }
-
-        public long getPriority() {
-            return taskExecution.getPriority();
-        }
-
-        public TaskExecution getTaskExecution() {
-            return taskExecution;
-        }
-
-        @Override
-        public int compareTo(TaskRunnable o) {
-            return (int) (getPriority() - o.getPriority());
+    public class ThreadPoolTaskExecutorTaskRunnable extends TaskRunnable {
+        public ThreadPoolTaskExecutorTaskRunnable(TaskExecution taskExecution) {
+            super(taskExecution);
         }
 
         @Override
         public final void run() {
-            String taskId = taskExecution.getId();
+            String taskId = getTaskExecution().getId();
             Integer attempts = attemptsMap.getOrDefault(taskId, 0);
             attemptsMap.put(taskId, attempts + 1);
 
-            if (!checkStop(taskExecution)) {
+            if (!checkStop(getTaskExecution())) {
                 return;
             }
             ConsumeResult result = ConsumeResult.FINISHED;
             try {
                 try {
                     // 跑正常流
-                    Assert.notNull(taskExecution.getConsumer());
-                    result = taskExecution.getConsumer().apply(taskExecution);
+                    Assert.notNull(getTaskExecution().getConsumer());
+                    result = getTaskExecution().getConsumer().apply(getTaskExecution());
                 } catch (Throwable e) {
                     // 遇到异常时执行异常流处理方法
-                    if (taskExecution.getErrorConsumer() != null) {
-                        result = taskExecution.getErrorConsumer().apply(taskExecution, e);
+                    if (getTaskExecution().getErrorConsumer() != null) {
+                        result = getTaskExecution().getErrorConsumer().apply(getTaskExecution(), e);
                     } else {
-                        result = defaultErrorConsumer.apply(taskExecution, e);
+                        result = defaultErrorConsumer.apply(getTaskExecution(), e);
                     }
                 } finally {
                     // 执行Finally处理方法
-                    if (taskExecution.getFinalyConsumer() != null) {
-                        taskExecution.getFinalyConsumer().accept(taskExecution);
+                    if (getTaskExecution().getFinallyConsumer() != null) {
+                        getTaskExecution().getFinallyConsumer().accept(getTaskExecution());
                     }
                 }
             } finally {
                 // 尝试次数少于阈值，可以回去重跑
                 if (result == ConsumeResult.REQUEUE && attemptsMap.get(taskId) < maxAttempt) {
-                    requeueTask(taskExecution);
+                    requeueTask(getTaskExecution());
                 } else if (result == ConsumeResult.REQUEUE) {
                     log.error("ID为{}的任务因重试次数过多被剔除出队列", taskId);
                     attemptsMap.remove(taskId);
@@ -248,16 +233,16 @@ public class ThreadPoolTaskExecutor extends ThreadPoolExecutor implements TaskEx
          * 重写出队逻辑，只有在任务资源申请成功才允许出队
          */
         protected Runnable dequeue() {
-            TaskRunnable goal = null;
+            ThreadPoolTaskExecutorTaskRunnable goal = null;
             long now = System.currentTimeMillis();
             if (now >= lastDequeueNullTimestamp.get() + dequeueNullIntervalMillis) {
                 for (Runnable runnable : this) {
-                    TaskRunnable taskRunnable = (TaskRunnable) runnable;
-                    TaskExecution taskExecution = taskRunnable.getTaskExecution();
+                    ThreadPoolTaskExecutorTaskRunnable threadPoolTaskExecutorTaskRunnable = (ThreadPoolTaskExecutorTaskRunnable) runnable;
+                    TaskExecution taskExecution = threadPoolTaskExecutorTaskRunnable.getTaskExecution();
                     Function<TaskExecution, Boolean> resourceAllocator = taskExecution.getResourceAllocator();
                     // 只有在资源申请到的时候才允许出队
                     if (resourceAllocator.apply(taskExecution)) {
-                        goal = taskRunnable;
+                        goal = threadPoolTaskExecutorTaskRunnable;
                         remove(goal);
                         break;
                     }

@@ -53,5 +53,5 @@ public class TaskExecution {
     /**
      * 善后工作消费者（可选）
      */
-    private Consumer<TaskExecution> finalyConsumer;
+    private Consumer<TaskExecution> finallyConsumer;
 }

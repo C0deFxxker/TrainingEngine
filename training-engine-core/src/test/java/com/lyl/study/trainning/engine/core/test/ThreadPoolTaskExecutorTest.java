@@ -432,7 +432,7 @@ public class ThreadPoolTaskExecutorTest {
             taskExecution.setResourceAllocator(_resourceAllocation);
             taskExecution.setConsumer(_consumer);
             taskExecution.setErrorConsumer(_errorConsumer);
-            taskExecution.setFinalyConsumer(_finallyConsumer);
+            taskExecution.setFinallyConsumer(_finallyConsumer);
             return taskExecution;
         }
     }
